@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
 ccflags-y += -I$(src)
+#ifdef OPLUS_BUG_STABILITY
+#/*Deliang.Peng@PSW.MM.Display.LCD.Stable,2020-05-06 add for smmu key log */
+ccflags-y += -I$(srctree)/techpack/display/oplus
+#endif /*OPLUS_BUG_STABILITY*/
 
 msm_kgsl_core-y = \
 	kgsl.o \
