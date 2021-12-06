@@ -18,5 +18,34 @@ source "drivers/soc/ux500/Kconfig"
 source "drivers/soc/versatile/Kconfig"
 source "drivers/soc/xilinx/Kconfig"
 source "drivers/soc/zte/Kconfig"
+source "drivers/soc/oplus/Kconfig"
+#ifdef OPLUS_FEATURE_IOMONITOR
+source "drivers/soc/oplus/iomonitor/Kconfig"
+#endif /*OPLUS_FEATURE_IOMONITOR*/
+#ifdef VENDOR_EDIT
+#wen.luo@BSP.Kernel.Stability 2020/03/25 add for oplus kernel system
+source "drivers/soc/oplus/system/Kconfig"
+#endif /* VENDOR_EDIT */
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#Jiheng.Xie@BSP.Kernel.Performance 2020/06/18 add for healthinfo
+source "drivers/soc/oplus/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+#SunFaliang@BSP.Power.Basic, 2020/07/09, add for owakelock.
+source "drivers/soc/oplus/owakelock/Kconfig"
+#endif /* OPLUS_FEATURE_POWERINFO_STANDBY */
+
+#ifdef OPLUS_FEATURE_HOUSTON
+source "drivers/soc/oplus/houston/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_SENSOR_SMEM
+#qiuzuolin@BSP.Sensor.Basic 2020/07/31 add for oplus sensor smem
+source "drivers/soc/oplus/sensor/Kconfig"
+#endif /* OPLUS_FEATURE_SENSOR_SMEM */
+
+#Add for NandSwap
+source "drivers/soc/oplus/oplus_nandswap/Kconfig"
 
 endmenu

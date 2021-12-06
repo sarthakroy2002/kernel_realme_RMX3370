@@ -22,6 +22,8 @@
 #include <linux/soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
 
+#include <soc/oplus/system/oppo_project.h>
+
 #define BUILD_ID_LENGTH 32
 #define CHIP_ID_LENGTH 32
 #define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
@@ -229,6 +231,16 @@ static union {
 /* max socinfo format version supported */
 #define MAX_SOCINFO_FORMAT SOCINFO_VERSION(0, 15)
 
+#ifdef OPLUS_ARCH_EXTENDS	
+/*xing.xiong@BSP.Kernel.Driver, 2019/11/04, Add for fake cpu id*/
+static char *fake_cpu_id = "SM8150";
+#ifdef CONFIG_ARCH_LITO
+static char *real_cpu_id = "SDM765G 5G";
+#else
+static char *real_cpu_id = "SM8250";
+#endif /*CONFIG_ARCH_LITO*/
+#endif /*OPLUS_ARCH_EXTENDS*/
+
 static struct msm_soc_info cpu_of_id[] = {
 	[0]  = {MSM_CPU_UNKNOWN, "Unknown CPU"},
 	/* 8960 IDs */
@@ -324,8 +336,12 @@ static struct msm_soc_info cpu_of_id[] = {
 	[455] = {MSM_CPU_KONA, "KONA"},
 
 	/* Lito ID */
+#ifdef OPLUS_ARCH_EXTENDS
+/*xing.xiong@BSP.Kernel.Driver, 2019/11/04, Add for fake cpu id*/
+	[400] = {MSM_CPU_LITO, "SDM765G 5G"},
+#else
 	[400] = {MSM_CPU_LITO, "LITO"},
-	[440] = {MSM_CPU_LITO, "LITO"},
+#endif
 
 	/* Orchid ID */
 	[476] = {MSM_CPU_ORCHID, "ORCHID"},
@@ -361,7 +377,26 @@ static struct msm_soc_info cpu_of_id[] = {
 	 * considered as unknown CPU.
 	 */
 };
+#ifdef OPLUS_ARCH_EXTENDS
+/* tongfeng.huang@BSP.CHG.Basic, 2020/01/01, add for  19125 */
+static struct msm_soc_info cpu_of_id_19125 = {
+	.generic_soc_type = MSM_CPU_LITO,
+	.soc_id_string = "SDM765 5G"
+};
 
+static struct msm_soc_info cpu_of_id_20061 = {
+	.generic_soc_type = MSM_CPU_KONA,
+	.soc_id_string = "SM8250_AC"
+};
+static struct msm_soc_info cpu_of_id_20828 = {
+	.generic_soc_type = MSM_CPU_KONA,
+	.soc_id_string = "SM8250_AC"
+};
+static struct msm_soc_info cpu_of_id_21615 = {
+	.generic_soc_type = MSM_CPU_KONA,
+	.soc_id_string = "SM8250_AC"
+};
+#endif
 static enum msm_cpu cur_cpu;
 static int current_image;
 static uint32_t socinfo_format;
@@ -379,6 +414,21 @@ EXPORT_SYMBOL(socinfo_get_id);
 
 char *socinfo_get_id_string(void)
 {
+#ifdef OPLUS_ARCH_EXTENDS
+/* tongfeng.huang@BSP.CHG.Basic, 2020/01/01, add for  19125 */
+	if((get_project() == 19125) ||(get_project() == 19126)){
+		return cpu_of_id_19125.soc_id_string;
+	}
+	if (!is_confidential() && (get_project() == 20061)) {
+		return cpu_of_id_20061.soc_id_string;
+	}
+	if (get_project() == 20828) {
+		return cpu_of_id_20828.soc_id_string;
+	}
+	if ((get_project() == 21615)||(get_project() == 21619)||(get_project() == 0x2169A)||(get_project() == 0x2169B)) {
+		return cpu_of_id_21615.soc_id_string;
+	}
+#endif
 	return (socinfo) ? cpu_of_id[socinfo->v0_1.id].soc_id_string : NULL;
 }
 EXPORT_SYMBOL(socinfo_get_id_string);
@@ -405,9 +455,29 @@ static char *msm_read_hardware_id(void)
 		goto err_path;
 	if (!cpu_of_id[socinfo->v0_1.id].soc_id_string)
 		goto err_path;
-
-	ret = strlcat(msm_soc_str, cpu_of_id[socinfo->v0_1.id].soc_id_string,
-			sizeof(msm_soc_str));
+#ifdef OPLUS_ARCH_EXTENDS
+/* tongfeng.huang@BSP.CHG.Basic, 2020/01/01, add for  19125 */
+	if((get_project() == 19125) ||(get_project() == 19126)){
+		ret = strlcat(msm_soc_str, cpu_of_id_19125.soc_id_string,
+				sizeof(msm_soc_str));
+	}
+	else if (!is_confidential() && (get_project() == 20061)) {
+		ret = strlcat(msm_soc_str, cpu_of_id_20061.soc_id_string,
+				sizeof(msm_soc_str));
+	}
+	else if (get_project() == 20828) {
+		ret = strlcat(msm_soc_str, cpu_of_id_20828.soc_id_string,
+				sizeof(msm_soc_str));
+	}
+	else if ((get_project() == 21615)||(get_project() == 21619)||(get_project() == 0x2169A)||(get_project() == 0x2169B)) {
+		ret = strlcat(msm_soc_str, cpu_of_id_21615.soc_id_string,
+				sizeof(msm_soc_str));
+	}
+	else{
+#endif
+		ret = strlcat(msm_soc_str, cpu_of_id[socinfo->v0_1.id].soc_id_string,
+				sizeof(msm_soc_str));
+	}
 	if (ret > sizeof(msm_soc_str))
 		goto err_path;
 
@@ -1646,6 +1716,14 @@ int __init socinfo_init(void)
 		pr_warn("New IDs added! ID => CPU mapping needs an update.\n");
 
 	cur_cpu = cpu_of_id[socinfo->v0_1.id].generic_soc_type;
+#ifdef OPLUS_ARCH_EXTENDS
+/*xing.xiong@BSP.Kernel.Driver, 2019/11/04, Add for fake cpu id*/
+	if (is_confidential()) {
+		cpu_of_id[socinfo->v0_1.id].soc_id_string = fake_cpu_id;
+	} else {
+		cpu_of_id[socinfo->v0_1.id].soc_id_string = real_cpu_id;
+	}
+#endif
 	boot_stats_init();
 	socinfo_print();
 	arch_read_hardware_id = msm_read_hardware_id;

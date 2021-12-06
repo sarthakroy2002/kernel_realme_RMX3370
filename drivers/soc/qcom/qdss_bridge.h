@@ -45,7 +45,7 @@ struct qdss_bridge_drvdata {
 	enum mhi_transfer_mode mode;
 	spinlock_t lock;
 	struct device *dev;
-	struct cdev cdev;
+	struct cdev *cdev;
 	struct mhi_device *mhi_dev;
 	struct work_struct read_work;
 	struct work_struct read_done_work;
