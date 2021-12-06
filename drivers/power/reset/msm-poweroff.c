@@ -27,6 +27,15 @@
 #include <soc/qcom/watchdog.h>
 #include <soc/qcom/minidump.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+#include <soc/oplus/system/oplus_project.h>
+#include <soc/oplus/system/qcom_minidump_enhance.h>
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_MISC
+#include <soc/oplus/system/oplus_misc.h>
+#endif
+
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
 #define EMERGENCY_DLOAD_MAGIC3    0x77777777
@@ -66,13 +75,29 @@ static int download_mode = 1;
 static struct kobject dload_kobj;
 
 static int in_panic;
+
+#ifndef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+//Bin.Xu@BSP.Kernel.Stability, 2020/4/4, add checklist: minidump
 static int dload_type = SCM_DLOAD_FULLDUMP;
+#else
+int dload_type = SCM_DLOAD_FULLDUMP;
+#endif
+
 static void *dload_mode_addr;
 static bool dload_mode_enabled;
 static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
 static bool force_warm_reboot;
+
+bool oem_is_fulldump(void)
+{
+	return download_mode && (dload_type & SCM_DLOAD_FULLDUMP);
+}
+/* Jianfeng.Qui@MULTIMEDIA.AUDIODRIVER.FEATURE, 2019/11/26, Add for workaround fix adsp stuck issue */
+#ifdef OPLUS_ARCH_EXTENDS
+EXPORT_SYMBOL(oem_is_fulldump);
+#endif /* OPLUS_ARCH_EXTENDS */
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -162,6 +187,44 @@ int scm_set_dload_mode(int arg1, int arg2)
 				&desc);
 }
 
+#ifdef OPLUS_BUG_STABILITY
+// Bin.Xu@BSP.Kernel.Stability, 2020/4/4, add checklist: minidump
+bool is_fulldump_enable(void)
+{
+	return download_mode && (dload_type & SCM_DLOAD_FULLDUMP);
+}
+
+void oppo_switch_fulldump(int on)
+{
+	int ret;
+
+	if (dload_mode_addr) {
+		__raw_writel(0xE47B337D, dload_mode_addr);
+		__raw_writel(0xCE14091A,
+			dload_mode_addr + sizeof(unsigned int));
+		mb();
+	}
+	if(on){
+		ret = scm_set_dload_mode(SCM_DLOAD_FULLDUMP, 0);
+		if (ret)
+			pr_err("Failed to set secure DLOAD mode: %d\n", ret);
+		dload_type = SCM_DLOAD_FULLDUMP;
+	}else{
+		ret = scm_set_dload_mode(SCM_DLOAD_MINIDUMP, 0);
+		if (ret)
+			pr_err("Failed to set secure DLOAD mode: %d\n", ret);
+		dload_type = SCM_DLOAD_MINIDUMP;
+	}
+
+	if(dload_type == SCM_DLOAD_MINIDUMP)
+		__raw_writel(EMMC_DLOAD_TYPE, dload_type_addr);
+	else
+		__raw_writel(0, dload_type_addr);
+	dload_mode_enabled = on;
+}
+EXPORT_SYMBOL(oppo_switch_fulldump);
+#endif /* OPLUS_BUG_STABILITY */
+
 static void set_dload_mode(int on)
 {
 	int ret;
@@ -177,6 +240,14 @@ static void set_dload_mode(int on)
 	ret = scm_set_dload_mode(on ? dload_type : 0, 0);
 	if (ret)
 		pr_err("Failed to set secure DLOAD mode: %d\n", ret);
+
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+// Bin.Xu@BSP.Kernel.Stability, 2020/4/4, add checklist: minidump
+	if(dload_type == SCM_DLOAD_MINIDUMP)
+		__raw_writel(EMMC_DLOAD_TYPE, dload_type_addr);
+	else
+		__raw_writel(0, dload_type_addr);
+#endif /* CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE */
 
 	dload_mode_enabled = on;
 }
@@ -485,7 +556,27 @@ static void msm_restart_prepare(const char *cmd)
 		need_warm_reset = (get_dload_mode() ||
 				(cmd != NULL && cmd[0] != '\0'));
 	}
+#ifdef OPLUS_BUG_STABILITY 
+//Fanhong.Kong@PSW.BSP.CHG,add 2018/3/25 panic reboot reason as kernel for hotfix 
+	if (in_panic){
+		//warm reset
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_KERNEL);
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+		if (get_eng_version() == AGING || get_eng_version() == FACTORY) {
+			oppo_switch_fulldump(1);
+		}
+#endif
+		flush_cache_all();
 
+		/*outer_flush_all is not supported by 64bit kernel*/
+#ifndef CONFIG_ARM64
+		outer_flush_all();
+#endif
+		return;
+	}
+#endif /* OPLUS_BUG_STABILITY */
 	if (force_warm_reboot)
 		pr_info("Forcing a warm reset of the system\n");
 
@@ -520,6 +611,23 @@ static void msm_restart_prepare(const char *cmd)
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_KEYS_CLEAR);
 			__raw_writel(0x7766550a, restart_reason);
+		#ifdef OPLUS_FEATURE_AGINGTEST
+		//xiaofan.yang@PSW.TECH.AgingTest, 2019/01/07,Add for factory agingtest
+		} else if(!strcmp(cmd, "sbllowmemtest")){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_SBL_DDR_CUS);
+			__raw_writel(0x7766550b, restart_reason);
+		}else if (!strcmp(cmd, "sblmemtest")){//oppo factory aging test
+			printk("[%s:%d] lunch ddr test!!\n", current->comm, current->pid);
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_SBL_DDRTEST);
+			__raw_writel(0x7766550b, restart_reason);
+		} else if(!strcmp(cmd, "usermemaging")){
+			printk("[%s:%d] lunch user memory test!!\n", current->comm, current->pid);
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_MEM_AGING);
+			__raw_writel(0x7766550b, restart_reason);
+		#endif
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			int ret;
@@ -530,10 +638,56 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
-		} else {
+		}
+		#ifdef OPLUS_BUG_STABILITY
+		/*xing.xing@BSP.Bootloader.Bootflow, 2019/04/11, Add for oppo boot mode*/
+		else if (!strncmp(cmd, "rf", 2)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_RF);
+		} else if (!strncmp(cmd, "wlan",4)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_WLAN);
+		#ifdef USE_MOS_MODE
+		} else if (!strncmp(cmd, "mos", 3)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_MOS);
+		#endif
+		} else if (!strncmp(cmd, "ftm", 3)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_FACTORY);
+		} else if (!strncmp(cmd, "kernel", 6)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_KERNEL);
+		} else if (!strncmp(cmd, "modem", 5)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_MODEM);
+		} else if (!strncmp(cmd, "android", 7)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_ANDROID);
+		} else if (!strncmp(cmd, "silence", 7)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_SILENCE);
+		} else if (!strncmp(cmd, "sau", 3)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_SAU);
+		} else if (!strncmp(cmd, "safe", 4)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_SAFE);
+		}
+		#endif
+		else {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_NORMAL);
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
+	#ifdef OPLUS_BUG_STABILITY
+	/*xing.xing@BSP.Bootloader.Bootflow, 2019/04/11, Add for oppo boot mode*/
+	else {
+		qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_NORMAL);
+	}
+	#endif
 
 	flush_cache_all();
 
@@ -609,6 +763,14 @@ static int msm_restart_probe(struct platform_device *pdev)
 	struct resource *mem;
 	struct device_node *np;
 	int ret = 0;
+
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+/* Fuchun.Liao@BSP.CHG.Basic 2020/04/08 add for minidump customized */
+	if (oplus_daily_build() == true || get_eng_version() == AGING || get_eng_version() == FACTORY)
+		dload_type = SCM_DLOAD_FULLDUMP;
+	else
+		dload_type = SCM_DLOAD_MINIDUMP;
+#endif
 
 	setup_dload_mode_support();
 
