@@ -68,6 +68,9 @@ unsigned long __stack_chk_guard __read_mostly;
 EXPORT_SYMBOL(__stack_chk_guard);
 #endif
 
+#ifndef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE
+/* YiXue.Ge@PSW.BSP.Kernel.Drv, 2017/11/27, add for some fault device can not reboot early */
+
 /*
  * Function pointers to optional machine specific functions
  */
@@ -76,6 +79,19 @@ EXPORT_SYMBOL_GPL(pm_power_off);
 
 void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 EXPORT_SYMBOL_GPL(arm_pm_restart);
+
+#else
+
+#include <soc/oplus/system/qcom_minidump_enhance.h>
+
+/*
+ * Function pointers to optional machine specific functions
+ */
+void (*pm_power_off)(void) = do_poweroff_early;
+EXPORT_SYMBOL_GPL(pm_power_off);
+void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd) = do_restart_early;
+
+#endif /* CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE */
 
 /*
  * This is our default idle handler.
@@ -289,13 +305,21 @@ void __show_regs(struct pt_regs *regs)
 		sp = regs->sp;
 		top_reg = 29;
 	}
-
+	
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE //yixue.ge@bsp.drv add for dump cpu contex for minidump
+	dumpcpuregs(regs);
+#endif
 	show_regs_print_info(KERN_DEFAULT);
 	print_pstate(regs);
 
 	if (!user_mode(regs)) {
 		printk("pc : %pS\n", (void *)regs->pc);
 		printk("lr : %pS\n", (void *)lr);
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_MINIDUMP_ENHANCE //wen.luo@bsp.kernel.stability add for dump parser addr
+		printk("pc : %016llx\n", regs->pc);
+		printk("lr : %016llx\n", lr);
+#endif
+
 	} else {
 		printk("pc : %016llx\n", regs->pc);
 		printk("lr : %016llx\n", lr);
@@ -590,6 +614,46 @@ out:
 	put_task_stack(p);
 	return ret;
 }
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+static unsigned long backtrace[4];
+
+unsigned long* get_backtrace(struct task_struct *p)
+{
+        struct stackframe frame;
+        unsigned long stack_page = 0;
+        int count = 0;
+	int layer_count = 0;
+	memset(backtrace, 0, 4);
+        if (!p || p == current || p->state == TASK_RUNNING)
+                return NULL;
+
+        stack_page = (unsigned long)try_get_task_stack(p);
+        if (!stack_page)
+                return NULL;
+ 	frame.fp = thread_saved_fp(p);
+        frame.pc = thread_saved_pc(p);
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+        frame.graph = p->curr_ret_stack;
+#endif
+
+        do {
+                if (unwind_frame(p, &frame))
+                        goto out;
+                if (!in_sched_functions(frame.pc) ) {
+			backtrace[layer_count] = frame.pc;
+			layer_count++;
+			if(layer_count == 4) {
+                        	goto out;
+			}
+                }
+        } while (count ++ < 16);
+
+out:
+        put_task_stack(p);
+        return backtrace;
+}
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 
 unsigned long arch_align_stack(unsigned long sp)
 {
