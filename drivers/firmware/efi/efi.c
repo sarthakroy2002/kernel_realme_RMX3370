@@ -31,6 +31,7 @@
 #include <linux/acpi.h>
 #include <linux/ucs2_string.h>
 #include <linux/memblock.h>
+#include <linux/of_fdt.h>
 
 #include <asm/early_ioremap.h>
 
@@ -757,6 +758,7 @@ int __init efi_get_fdt_params(struct efi_fdt_params *params)
 	int ret;
 
 	pr_info("Getting EFI parameters from FDT:\n");
+	pr_info("Get model name: %s\n", of_flat_dt_get_machine_name());
 
 	info.found = 0;
 	info.params = params;
