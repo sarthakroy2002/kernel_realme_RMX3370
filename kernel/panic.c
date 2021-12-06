@@ -31,6 +31,11 @@
 #include <linux/debugfs.h>
 #include <asm/sections.h>
 #include <soc/qcom/minidump.h>
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+/* terry.zhong@bsp.kernel.stability, 2021/3/28, Add for dump reason */
+#include <soc/oplus/system/dump_reason.h>
+#endif /*CONFIG_OPLUS_FEATURE_DUMP_REASON*/
+
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -128,6 +133,11 @@ void nmi_panic(struct pt_regs *regs, const char *msg)
 }
 EXPORT_SYMBOL(nmi_panic);
 
+#ifdef CONFIG_OPLUS_FEATURE_PANIC_FLUSH
+/* yawnu@TECH.Storage.FS.oF2FS, 2019/09/13, flush device cache in panic if necessary */
+extern int panic_flush_device_cache(int timeout);
+#endif
+
 /**
  *	panic - halt the system
  *	@fmt: The text string to print
@@ -144,7 +154,10 @@ void panic(const char *fmt, ...)
 	int state = 0;
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
-
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+/* terry.zhong@bsp.kernel.stability, 2021/3/28, Add for dump reason */
+	char *function_name;
+#endif /*CONFIG_OPLUS_FEATURE_DUMP_REASON*/
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
 	 * from deadlocking the first cpu that invokes the panic, since
@@ -183,7 +196,17 @@ void panic(const char *fmt, ...)
 	dump_stack_minidump(0);
 	if (vendor_panic_cb)
 		vendor_panic_cb(0);
+#ifdef CONFIG_OPLUS_FEATURE_PANIC_FLUSH
+/* yawnu@TECH.Storage.FS.oF2FS, 2019/09/13, flush device cache in panic if necessary */
+	panic_flush_device_cache(2000);
+#endif
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+/* terry.zhong@bsp.kernel.stability, 2021/3/28, Add for dump reason */
+	function_name = parse_function_builtin_return_address((unsigned long)__builtin_return_address(0));
+	save_dump_reason_to_smem(buf, function_name);
+#endif /*CONFIG_OPLUS_FEATURE_DUMP_REASON*/
+
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing

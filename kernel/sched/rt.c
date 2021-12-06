@@ -1408,8 +1408,12 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	schedtune_enqueue_task(p, cpu_of(rq));
 
-	if (flags & ENQUEUE_WAKEUP)
+	if (flags & ENQUEUE_WAKEUP) {
 		rt_se->timeout = 0;
+		#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+		trace_sched_blocked_reason(p);
+		#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
+	}
 
 	enqueue_rt_entity(rt_se, flags);
 	walt_inc_cumulative_runnable_avg(rq, p);
@@ -1771,6 +1775,12 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	int best_cpu_idle_idx = INT_MAX;
 	int cpu_idle_idx = -1;
 	bool boost_on_big = rt_boost_on_big();
+
+#ifdef CONFIG_OPLUS_SF_BOOST
+	/* For surfaceflinger with util > 90, prefer to use big core */
+	if (task->compensate_need == 2 && tutil > 90)
+		boost_on_big = true;
+#endif
 
 	rcu_read_lock();
 

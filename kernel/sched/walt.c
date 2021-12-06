@@ -13,6 +13,13 @@
 #include "walt.h"
 
 #include <trace/events/sched.h>
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#include <linux/sched.h>
+#include <linux/sched_assist/sched_assist_common.h>
+extern u64 ux_task_load[];
+extern u64 ux_load_ts[];
+#define UX_LOAD_WINDOW 8000000
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 const char *task_event_names[] = {"PUT_PREV_TASK", "PICK_NEXT_TASK",
 				  "TASK_WAKE", "TASK_MIGRATE", "TASK_UPDATE",
@@ -515,7 +522,11 @@ static inline u64 freq_policy_load(struct rq *rq)
 	u64 aggr_grp_load = cluster->aggr_grp_load;
 	u64 load, tt_load = 0;
 	struct task_struct *cpu_ksoftirqd = per_cpu(ksoftirqd, cpu_of(rq));
-
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	u64 wallclock = sched_ktime_clock();
+	u64 timeline = 0;
+	int cpu = cpu_of(rq);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	if (rq->ed_task != NULL) {
 		load = sched_ravg_window;
 		goto done;
@@ -550,6 +561,14 @@ static inline u64 freq_policy_load(struct rq *rq)
 			load = div64_u64(load * sysctl_sched_user_hint,
 					 (u64)100);
 	}
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	if (sched_assist_scene(SA_SLIDE) && ux_load_ts[cpu]) {
+		timeline = wallclock - ux_load_ts[cpu];
+		if  (timeline >= UX_LOAD_WINDOW)
+			ux_task_load[cpu] = 0;
+		load = max_t(u64, load, ux_task_load[cpu]);
+	}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 done:
 	trace_sched_load_to_gov(rq, aggr_grp_load, tt_load, sched_freq_aggr_en,
@@ -881,7 +900,24 @@ migrate_top_tasks(struct task_struct *p, struct rq *src_rq, struct rq *dst_rq)
 				src_rq->top_tasks_bitmap[src], top_index);
 	}
 }
+#ifdef OPLUS_FEATURE_EDTASK_IMPROVE
+//Tiren.Ma@ANDROID.POWER, 2020-06-24, Add for improving ed task migration
+void migrate_ed_task(struct task_struct *p, u64 wallclock,
+				struct rq *src_rq, struct rq *dest_rq)
+{
+	int src_cpu = cpu_of(src_rq);
+	int dest_cpu = cpu_of(dest_rq);
 
+	/* For ed task, reset last_wake_ts if task migrate to faster cpu */
+	if (capacity_orig_of(src_cpu) < capacity_orig_of(dest_cpu)) {
+		p->last_wake_ts = wallclock;
+		if(dest_rq->ed_task == p) {
+			dest_rq->ed_task = NULL;
+		}
+	}
+}
+extern int sysctl_ed_task_enabled;
+#endif /* OPLUS_FEATURE_EDTASK_IMPROVE */
 void fixup_busy_time(struct task_struct *p, int new_cpu)
 {
 	struct rq *src_rq = task_rq(p);
@@ -999,7 +1035,12 @@ void fixup_busy_time(struct task_struct *p, int new_cpu)
 			dest_rq->ed_task = p;
 		}
 	}
-
+#ifdef OPLUS_FEATURE_EDTASK_IMPROVE
+//Tiren.Ma@ANDROID.POWER, 2020-06-24, Add for improving ed task migration
+	if(sysctl_ed_task_enabled) {
+		migrate_ed_task(p, wallclock, src_rq, dest_rq);
+	}
+#endif /* OPLUS_FEATURE_EDTASK_IMPROVE */
 done:
 	if (p->state == TASK_WAKING)
 		double_rq_unlock(src_rq, dest_rq);
@@ -1830,6 +1871,9 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	}
 
 	p->ravg.sum = 0;
+#ifdef OPLUS_FEATURE_POWER_CPUFREQ
+	sysctl_sched_window_stats_policy = schedtune_window_policy(p);
+#endif
 
 	if (sysctl_sched_window_stats_policy == WINDOW_STATS_RECENT) {
 		demand = runtime;
