@@ -23,6 +23,11 @@
 
 /* sys I/F for thermal zone */
 
+#ifdef OPLUS_BUG_STABILITY
+/*Mark.Yao@PSW.MM.Display.LCD.Stable,2019-09-17 temp modify for 1024 brightness */
+#include <linux/vmalloc.h>
+#endif /* OPLUS_BUG_STABILITY */
+
 static ssize_t
 type_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -37,7 +42,12 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 	int temperature, ret;
 
+#ifdef OPLUS_BUG_STABILITY
+//wen.luo@bsp.kernel.stability, 2020/6/18 ,workaround for get_temp temp ss reboot
+	ret = thermal_zone_get_temp_workaround(tz, &temperature);
+#else
 	ret = thermal_zone_get_temp(tz, &temperature);
+#endif
 
 	if (ret)
 		return ret;
@@ -1064,6 +1074,12 @@ static void cooling_device_stats_setup(struct thermal_cooling_device *cdev)
 	var += sizeof(*stats->trans_table) * states * states;
 
 	stats = kzalloc(var, GFP_KERNEL);
+#ifdef OPLUS_BUG_STABILITY
+	if (!stats) {
+		dev_err(&cdev->device, "need buffer size=%d, try to the vzalloc() func!\n", var);
+		stats = vzalloc(var);
+	}
+#endif
 	if (!stats)
 		return;
 
