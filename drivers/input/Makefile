@@ -31,3 +31,12 @@ obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+
+#ifdef OPLUS_FEATURE_FINGERPRINT
+ifneq ($(TARGET_PRODUCT), qssi)
+obj-$(CONFIG_OPPO_FINGERPRINT)  += oplus_fp_drivers/
+#Bin.Li@BSP.Fingerprint.Secure 2020/08/28 add for oplus secure
+obj-$(CONFIG_OPLUS_SECURE)  += oplus_secure_drivers/
+#endif /* OPLUS_FEATURE_FINGERPRINT */
+endif
+#endif
