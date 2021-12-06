@@ -30,6 +30,16 @@
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
 
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+#include <linux/healthinfo/jank_monitor.h>
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef VENDOR_EDIT
+/* Fuchun.Liao@BSP.CHG.Basic 2019/09/23 modify for oppo wdog */
+extern void show_regs(struct pt_regs *);
+#endif /* VENDOR_EDIT */
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
 struct backing_dev_info;
@@ -226,6 +236,17 @@ enum fps {
 
 #endif
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+extern int sysctl_sched_assist_enabled;
+extern int sysctl_sched_assist_scene;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+extern int sysctl_cpu_multi_thread;
+#endif
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+extern int sysctl_slide_boost_enabled;
+extern int sysctl_boost_task_threshold;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 /* Task command name length: */
 #define TASK_COMM_LEN			16
 
@@ -806,6 +827,13 @@ struct wake_q_node {
 	struct wake_q_node *next;
 };
 
+#if defined(OPLUS_FEATURE_PROCESS_RECLAIM) && defined(CONFIG_PROCESS_RECLAIM_ENHANCE)
+union reclaim_limit {
+	unsigned long stop_jiffies;
+	unsigned long stop_scan_addr;
+};
+#endif
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -828,6 +856,10 @@ struct task_struct {
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
 	unsigned int			ptrace;
+
+#ifdef CONFIG_OPLUS_SF_BOOST
+	int compensate_need;
+#endif
 
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
@@ -1369,6 +1401,10 @@ struct task_struct {
 	int				latency_record_count;
 	struct latency_record		latency_record[LT_SAVECOUNT];
 #endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_ION) && defined(CONFIG_DUMP_TASKS_MEM)
+	struct list_head user_tasks;
+	atomic64_t ions;
+#endif
 	/*
 	 * Time slack values; these are used to round up poll() and
 	 * select() etc timeout values. These are in nanoseconds.
@@ -1446,7 +1482,9 @@ struct task_struct {
 #ifdef CONFIG_BLK_CGROUP
 	struct request_queue		*throttle_queue;
 #endif
-
+#if defined(OPLUS_FEATURE_PROCESS_RECLAIM) && defined(CONFIG_PROCESS_RECLAIM_ENHANCE)
+	union reclaim_limit reclaim;
+#endif
 #ifdef CONFIG_UPROBES
 	struct uprobe_task		*utask;
 #endif
@@ -1475,13 +1513,35 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
-
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	int ux_state;
+	atomic64_t inherit_ux;
+	struct list_head ux_entry;
+	int ux_depth;
+	u64 enqueue_time;
+	u64 inherit_ux_start;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+	int jank_trace;
+	struct jank_monitor_info jank_info;
+	unsigned in_mutex:1;
+	unsigned in_downread:1;
+	unsigned in_downwrite:1;
+	unsigned in_futex:1;
+	unsigned in_binder:1;
+	unsigned in_epoll:1;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
 	 */
 	randomized_struct_fields_end
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	struct fuse_package *fpack;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;
 
@@ -1492,6 +1552,14 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
+
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+struct fuse_package {
+	bool fuse_open_req;
+	struct file *filp;
+	char *iname;
+};
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 static inline struct pid *task_pid(struct task_struct *task)
 {
@@ -1680,6 +1748,11 @@ extern struct pid *cad_pid;
 #define PF_MUTEX_TESTER		0x20000000	/* Thread belongs to the rt mutex tester */
 #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
+#if defined(OPLUS_FEATURE_PROCESS_RECLAIM) && defined(CONFIG_PROCESS_RECLAIM_ENHANCE)
+#define PF_RECLAIM_SHRINK	0x02000000	/* Flag the task is memory compresser */
+
+#define current_is_reclaimer() (current->flags & PF_RECLAIM_SHRINK)
+#endif
 
 /*
  * Only the _current_ task can read/write to tsk->flags, but other
@@ -1895,9 +1968,15 @@ static inline void kick_process(struct task_struct *tsk) { }
 
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+extern void sched_assist_target_comm(struct task_struct *task);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 static inline void set_task_comm(struct task_struct *tsk, const char *from)
 {
 	__set_task_comm(tsk, from, false);
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	sched_assist_target_comm(tsk);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 }
 
 extern char *__get_task_comm(char *to, size_t len, struct task_struct *tsk);

@@ -91,6 +91,7 @@ struct subsys_desc {
 
 	int (*shutdown)(const struct subsys_desc *desc, bool force_stop);
 	int (*powerup)(const struct subsys_desc *desc);
+	void (*force_reset)(const struct subsys_desc *desc);
 	void (*crash_shutdown)(const struct subsys_desc *desc);
 	int (*ramdump)(int, const struct subsys_desc *desc);
 	void (*free_memory)(const struct subsys_desc *desc);
@@ -144,8 +145,19 @@ struct notif_data {
 
 #if defined(CONFIG_MSM_SUBSYSTEM_RESTART)
 
+/* Jianfeng.Qui@MULTIMEDIA.AUDIODRIVER.FEATURE, 2019/11/26, Add for workaround fix adsp stuck issue */
+#ifdef OPLUS_FEATURE_ADSP_RECOVERY
+extern void oplus_set_ssr_state(bool ssr_state);
+extern bool oplus_get_ssr_state(void);
+#endif /* OPLUS_FEATURE_ADSP_RECOVERY */
+
 extern int subsys_get_restart_level(struct subsys_device *dev);
 extern int subsystem_restart_dev(struct subsys_device *dev);
+#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+//Liu.Wei@NETWORK.RF.10384, 2020/03/27, Add for report modem crash uevent
+extern void __subsystem_send_uevent(struct device *dev, char *reason);
+extern void subsystem_send_uevent(struct subsys_device *dev, char *reason);
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 
@@ -170,6 +182,15 @@ struct subsys_device *find_subsys_device(const char *str);
 extern int wait_for_shutdown_ack(struct subsys_desc *desc);
 #else
 
+/* Jianfeng.Qui@MULTIMEDIA.AUDIODRIVER.FEATURE, 2019/11/26, Add for workaround fix adsp stuck issue */
+#ifdef OPLUS_FEATURE_ADSP_RECOVERY
+static inline void oplus_set_ssr_state(bool ssr_state) {}
+static inline bool oplus_get_ssr_state(void)
+{
+	return false;
+}
+#endif /* OPLUS_FEATURE_ADSP_RECOVERY */
+
 static inline int subsys_get_restart_level(struct subsys_device *dev)
 {
 	return 0;
@@ -179,6 +200,18 @@ static inline int subsystem_restart_dev(struct subsys_device *dev)
 {
 	return 0;
 }
+
+#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+//Liu.Wei@NETWORK.RF.10384, 2020/03/27, Add for report modem crash uevent
+static inline void __subsystem_send_uevent(struct device *dev, char *reason)
+{
+	return;
+}
+static inline void subsystem_send_uevent(struct subsys_device *dev, char *reason)
+{
+	return;
+}
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 
 static inline int subsystem_restart(const char *name)
 {

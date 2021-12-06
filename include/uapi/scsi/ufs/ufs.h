@@ -20,6 +20,12 @@ enum flag_idn {
 	QUERY_FLAG_IDN_WB_EN                            = 0x0E,
 	QUERY_FLAG_IDN_WB_BUFF_FLUSH_EN                 = 0x0F,
 	QUERY_FLAG_IDN_WB_BUFF_FLUSH_DURING_HIBERN8     = 0x10,
+#ifdef OPLUS_FEATURE_UFSPLUS
+//Jinghua.Yu@BSP.Storage.UFS 2020/06/12, Add TAG for UFS plus
+#if defined(CONFIG_UFSHPB) || defined(CONFIG_SCSI_SKHPB)
+	QUERY_FLAG_IDN_HPB_RESET                        = 0x11,
+#endif
+#endif
 };
 
 /* Attribute idn for Query requests */
@@ -52,6 +58,18 @@ enum attr_idn {
 	QUERY_ATTR_IDN_AVAIL_WB_BUFF_SIZE       = 0x1D,
 	QUERY_ATTR_IDN_WB_BUFF_LIFE_TIME_EST    = 0x1E,
 	QUERY_ATTR_IDN_CURR_WB_BUFF_SIZE        = 0x1F,
+#ifdef OPLUS_FEATURE_UFSPLUS
+//Jinghua.Yu@BSP.Storage.UFS 2020/06/12, Add TAG for UFS plus
+#if defined(CONFIG_UFSFEATURE)
+	QUERY_ATTR_IDN_SUP_VENDOR_OPTIONS		= 0xFF,
+	QUERY_ATTR_IDN_MANUAL_GC_CONT			= 0x12,
+	QUERY_ATTR_IDN_MANUAL_GC_STATUS			= 0x13,
+#endif
+#if defined(CONFIG_UFSHID)
+	QUERY_ATTR_IDN_HID_OPERATION            = 0x20,
+	QUERY_ATTR_IDN_HID_FRAG_LEVEL           = 0x21,
+#endif
+#endif
 };
 
 #define QUERY_ATTR_IDN_BOOT_LU_EN_MAX	0x02
@@ -72,6 +90,16 @@ enum desc_idn {
 	QUERY_DESC_IDN_HEALTH           = 0x9,
 	QUERY_DESC_IDN_MAX,
 };
+
+#if defined(CONFIG_UFSFEATURE)
+enum {
+	MANUAL_GC_OFF = 0,
+	MANUAL_GC_ON,
+	MANUAL_GC_DISABLE,
+	MANUAL_GC_ENABLE,
+	MANUAL_GC_MAX,
+};
+#endif
 
 /* UTP QUERY Transaction Specific Fields OpCode */
 enum query_opcode {
