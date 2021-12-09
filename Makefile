@@ -445,13 +445,6 @@ CFLAGS_KERNEL +=   -DVENDOR_EDIT
 CFLAGS_MODULE +=   -DVENDOR_EDIT
 # endif
 
-#ifdef VENDOR_EDIT
-#Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/05/09, sjc Add for 806 high/low temp aging test
-ifeq ($(OPPO_HIGH_TEMP_VERSION),true)
-KBUILD_CFLAGS += -DCONFIG_HIGH_TEMP_VERSION
-endif
-#endif /* VENDOR_EDIT */
-
 #ifdef COLOROS_EDIT
 #Sunliang@TECH.SysTech.Build.BaseConfig, 2020/03/18, oplus customzation for flags or other variabls
 -include OplusKernelEnvConfig.mk
