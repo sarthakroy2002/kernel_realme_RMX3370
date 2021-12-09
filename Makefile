@@ -459,9 +459,7 @@ endif
 
 #ifdef VENDOR_EDIT
 #huangjianan@TECH.Storage.FS.F2FS, 2020-03-08, add for aging version
-ifneq (,$(findstring Aging,$(SPECIAL_VERSION)))
-OPPO_F2FS_DEBUG := true
-endif
+OPPO_F2FS_DEBUG := false
 
 export OPPO_F2FS_DEBUG
 #endif /* VENDOR_EDIT */
